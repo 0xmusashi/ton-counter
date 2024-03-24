@@ -1,39 +1,39 @@
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Cell, toNano } from '@ton/core';
-import { Counter } from '../wrappers/Counter';
-import '@ton/test-utils';
-import { compile } from '@ton/blueprint';
+import * as fs from "fs";
+import { Cell, toNano } from "@ton/core";
+import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
+import Counter from "../wrappers/Counter";
+import "@ton/test-utils"; // register matchers
 
-describe('Counter', () => {
-    let code: Cell;
-
-    beforeAll(async () => {
-        code = await compile('Counter');
-    });
-
+describe("Counter tests", () => {
     let blockchain: Blockchain;
-    let deployer: SandboxContract<TreasuryContract>;
-    let counter: SandboxContract<Counter>;
+    let wallet1: SandboxContract<TreasuryContract>;
+    let counterContract: SandboxContract<Counter>;
 
     beforeEach(async () => {
+        // prepare Counter's initial code and data cells for deployment
+        const counterCode = Cell.fromBoc(fs.readFileSync("build/counter.cell"))[0]; // version with ~dump instruction
+        const initialCounterValue = 17; // no collisions possible since sandbox is a private local instance
+        const counter = Counter.createForDeploy(counterCode, initialCounterValue);
+
+        // initialize the blockchain sandbox
         blockchain = await Blockchain.create();
+        wallet1 = await blockchain.treasury("user1");
 
-        counter = blockchain.openContract(Counter.createFromConfig({}, code));
+        // deploy counter
+        counterContract = blockchain.openContract(counter);
+        await counterContract.sendDeploy(wallet1.getSender());
+    }),
 
-        deployer = await blockchain.treasury('deployer');
-
-        const deployResult = await counter.sendDeploy(deployer.getSender(), toNano('0.05'));
-
-        expect(deployResult.transactions).toHaveTransaction({
-            from: deployer.address,
-            to: counter.address,
-            deploy: true,
-            success: true,
+        it("should send ton coin to the contract", async () => {
+            console.log("sending 7.123 TON");
+            await wallet1.send({
+                to: counterContract.address,
+                value: toNano("7.123")
+            });
         });
-    });
 
-    it('should deploy', async () => {
-        // the check is done inside beforeEach
-        // blockchain and counter are ready to use
-    });
+    it("should increment the counter value", async () => {
+        console.log("sending increment message");
+        await counterContract.sendIncrement(wallet1.getSender());
+    })
 });
