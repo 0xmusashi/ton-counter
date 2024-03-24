@@ -19,4 +19,9 @@ export default class Counter implements Contract {
             bounce: false
         });
     }
+
+    async getCounter(provider: ContractProvider) {
+        const { stack } = await provider.get("counter", []);
+        return stack.readBigNumber();
+    }
 }
